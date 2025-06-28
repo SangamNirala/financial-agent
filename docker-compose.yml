@@ -1,0 +1,80 @@
+version: '3.8'
+
+services:
+  financial-risk-ai:
+    build: .
+    container_name: financial-risk-ai
+    ports:
+      - "8000:8000"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - CHROMA_PERSIST_DIR=/app/chroma_db
+      - LOG_LEVEL=INFO
+    env_file:
+      - .env
+    volumes:
+      - ./logs:/app/logs
+      - ./data:/app/data
+      - chroma_data:/app/chroma_db
+    depends_on:
+      - redis
+      - prometheus
+    networks:
+      - financial-ai-network
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: financial-ai-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - financial-ai-network
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: financial-ai-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    networks:
+      - financial-ai-network
+    restart: unless-stopped
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: financial-ai-grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin123
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards
+      - ./monitoring/grafana/datasources:/etc/grafana/provisioning/datasources
+    networks:
+      - financial-ai-network
+    restart: unless-stopped
+    depends_on:
+      - prometheus
+
+volumes:
+  redis_data:
+  chroma_data:
+  prometheus_data:
+  grafana_data:
+
+networks:
+  financial-ai-network:
+    driver: bridge
